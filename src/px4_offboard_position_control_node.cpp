@@ -42,6 +42,16 @@
 #include <keyboard/Key.h>
 #include <math.h>
 
+
+
+#include <stdio.h>
+#include <mavros_msgs/CommandBool.h>
+#include <mavros_msgs/SetMode.h>
+#include <mavros_msgs/State.h>
+
+
+
+
 geometry_msgs::PoseStamped oriPos,ps,currentPos,nextPos,initCirclePos;
 ros::Publisher localPositionPublisher;
 float value;
@@ -50,6 +60,14 @@ Eigen::Vector3d current;
 int angle,angleStep;
 bool isFlyCircle,hasInitFlyCircle;
 int radius;
+
+ros::ServiceClient arming_client;
+ros::ServiceClient set_mode_client;
+mavros_msgs::SetMode offb_set_mode;
+mavros_msgs::State current_state;
+mavros_msgs::CommandBool arm_cmd;
+
+
 
 Eigen::Vector3d circle_shape(int angle){
     double r = 5.0f;  // 5 meters radius
@@ -232,11 +250,20 @@ void sendCommand(const keyboard::Key &key)
         ROS_INFO_STREAM("Forward: " << value);
         break;
       }
-      case 'k':
+      case ',':
       {
         // Backward
         ps.pose.position.x -= value;
         ROS_INFO_STREAM("Backward: " << value);
+        break;
+      }
+      case 'k':
+      {
+        // Hold
+        ps.pose.position.x += 0;
+        ps.pose.position.y += 0;
+        ps.pose.position.z += 0;
+        ROS_INFO_STREAM("Hold: " << value);
         break;
       }
       case 'j':
@@ -279,9 +306,9 @@ void sendCommand(const keyboard::Key &key)
       {
         // Down
         ps.pose.position.z -= value;
-        if (ps.pose.position.z < 1)
+        if (ps.pose.position.z < 0.2)
         {
-          ps.pose.position.z = 1;
+          ps.pose.position.z = 0.2;
         }
         ROS_INFO_STREAM("Down: "<< value);
         break;
@@ -326,38 +353,59 @@ void sendCommand(const keyboard::Key &key)
         ROS_INFO_STREAM("Manual Mode");
         break;
       }
+      // case 't':
+      // {
+      //   // increase radius
+      //   radius++;
+      //   ROS_INFO_STREAM("increase radius" << radius);
+      //   break;
+      // }
+      // case 'g':
+      // {
+      //   // increase radius
+      //   radius--;
+      //   if (radius < 1)
+      //   {
+      //     radius = 1;
+      //   }
+      //   ROS_INFO_STREAM("decrease radius" << radius);
+      //   break;
+      // }
+      // case 'b':
+      // {
+      //   angleStep++;
+      //   ROS_INFO_STREAM("angle step:" << angleStep);
+      //   break;
+      // }
       case 't':
       {
-        // increase radius
-        radius++;
-        ROS_INFO_STREAM("increase radius" << radius);
+        offb_set_mode.request.custom_mode = "OFFBOARD";
+        set_mode_client.call(offb_set_mode);
+
+        if (offb_set_mode.response.success)
+          ROS_WARN_STREAM("Offboard enabled");
         break;
       }
       case 'g':
       {
-        // increase radius
-        radius--;
-        if (radius < 1)
-        {
-          radius = 1;
-        }
-        ROS_INFO_STREAM("decrease radius" << radius);
+        arm_cmd.request.value = true;
+        arming_client.call(arm_cmd);
+        if (arm_cmd.response.success)
+          ROS_WARN_STREAM("Vehicle armed");
         break;
       }
       case 'b':
       {
-        angleStep++;
-        ROS_INFO_STREAM("angle step:" << angleStep);
+        arm_cmd.request.value = false;
+        arming_client.call(arm_cmd);
+        if (arm_cmd.response.success)
+          ROS_WARN_STREAM("Vehicle disarmed");
         break;
       }
       case 'n':
       {
-        angleStep--;
-        if (angleStep < 1)
-        {
-          angleStep = 1;
-        }
-        ROS_INFO_STREAM("angle step:" << angleStep);
+        hasSet = false;
+        ROS_INFO_STREAM("Local Current Position");
         break;
       }
 
@@ -377,7 +425,7 @@ int main(int argc, char **argv)
   ros::NodeHandle nodeHandle;
 
   localPositionPublisher = nodeHandle.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local",10);
-  ros::Subscriber localPositionSubsciber = nodeHandle.subscribe("/mavros/local_position/local", 10, localPositionReceived);
+  ros::Subscriber localPositionSubsciber = nodeHandle.subscribe("/mavros/local_position/pose", 10, localPositionReceived);
   ros::Subscriber commandSubscriber = nodeHandle.subscribe("/keyboard/keydown",1,sendCommand);
   
   value = 0.1f;
@@ -389,6 +437,11 @@ int main(int argc, char **argv)
   angle = 0;
   radius = 5;
   angleStep = 5;
+
+  arming_client = nodeHandle.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
+  set_mode_client = nodeHandle.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+
+
 
   ros::Rate loopRate(10.0);
 
