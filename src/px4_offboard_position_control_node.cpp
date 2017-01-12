@@ -50,192 +50,219 @@
 #include <mavros_msgs/State.h>
 
 
+geometry_msgs::PoseStamped oriPos1, ps1, currentPos1, nextPos1, initCirclePos1;
+geometry_msgs::PoseStamped oriPos2, ps2, currentPos2, nextPos2, initCirclePos2;
 
+ros::Publisher localPositionPublisher1;
+ros::Publisher localPositionPublisher2;
 
-geometry_msgs::PoseStamped oriPos,ps,currentPos,nextPos,initCirclePos;
-ros::Publisher localPositionPublisher;
 float value;
-bool hasSet;
-Eigen::Vector3d current;
+bool hasSet1;
+bool hasSet2;
+Eigen::Vector3d current1;
+Eigen::Vector3d current2;
+
 int angle,angleStep;
 bool isFlyCircle,hasInitFlyCircle;
 int radius;
 
-ros::ServiceClient arming_client;
-ros::ServiceClient set_mode_client;
-mavros_msgs::SetMode offb_set_mode;
-mavros_msgs::State current_state;
-mavros_msgs::CommandBool arm_cmd;
+ros::ServiceClient arming_client1;
+ros::ServiceClient arming_client2;
+
+ros::ServiceClient set_mode_client1;
+ros::ServiceClient set_mode_client2;
+
+mavros_msgs::SetMode offb_set_mode1;
+mavros_msgs::SetMode offb_set_mode2;
+
+mavros_msgs::State current_state1;
+mavros_msgs::State current_state2;
+
+
+mavros_msgs::CommandBool arm_cmd1;
+mavros_msgs::CommandBool arm_cmd2;
+
+int currentUAV;
 
 
 
-Eigen::Vector3d circle_shape(int angle){
-    double r = 5.0f;  // 5 meters radius
+// Eigen::Vector3d circle_shape(int angle){
+//   double r = 5.0f;  // 5 meters radius
 
-    return Eigen::Vector3d(r * cos(angles::from_degrees(angle)),
-        r * sin(angles::from_degrees(angle)),
-        1.0f);
-  }
+//   return Eigen::Vector3d(r * cos(angles::from_degrees(angle)),
+//       r * sin(angles::from_degrees(angle)),
+//       1.0f);
+// }
 
 
-void flyCircleWithRadius(double r)
-{
-  if(!hasInitFlyCircle){
-    initCirclePos = currentPos;
-    nextPos = initCirclePos;
-    angle = angle + angleStep;
-    nextPos.pose.position.x = r * cos(angles::from_degrees(angle)) - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = r * sin(angles::from_degrees(angle)) + initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-    hasInitFlyCircle = true;
-  } 
+// void flyCircleWithRadius(double r)
+// {
+//   if(!hasInitFlyCircle){
+//     initCirclePos = currentPos;
+//     nextPos = initCirclePos;
+//     angle = angle + angleStep;
+//     nextPos.pose.position.x = r * cos(angles::from_degrees(angle)) - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = r * sin(angles::from_degrees(angle)) + initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//     hasInitFlyCircle = true;
+//   } 
   
-  // judge whether is reached
-  bool isReached = false;
-  double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
-                       (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
-  double threshold = 0.2;
-  if (distance < threshold)
-  {
-    isReached = true;
-  }
+//   // judge whether is reached
+//   bool isReached = false;
+//   double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
+//                        (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
+//   double threshold = 0.2;
+//   if (distance < threshold)
+//   {
+//     isReached = true;
+//   }
 
-  if (isReached)
-  {
-    // send next pos
-    angle = angle + angleStep;
-    if(angle > 360) angle = angle - 360;
-    nextPos = initCirclePos;
-    nextPos.pose.position.x = r * cos(angles::from_degrees(angle)) - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = r * sin(angles::from_degrees(angle)) + initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
+//   if (isReached)
+//   {
+//     // send next pos
+//     angle = angle + angleStep;
+//     if(angle > 360) angle = angle - 360;
+//     nextPos = initCirclePos;
+//     nextPos.pose.position.x = r * cos(angles::from_degrees(angle)) - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = r * sin(angles::from_degrees(angle)) + initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
     
-  } else {
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-  }
+//   } else {
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//   }
 
 
-}
+// }
 
-void flyHeartWithRadius(double r)
-{
-  if(!hasInitFlyCircle){
-    initCirclePos = currentPos;
-    nextPos = initCirclePos;
-    angle = angle + angleStep;
-    nextPos.pose.position.x = r *(2*cos(angles::from_degrees(angle)) - cos(angles::from_degrees(2*angle)))  - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = r *(2*sin(angles::from_degrees(angle)) - sin(angles::from_degrees(2*angle)))  + initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-    hasInitFlyCircle = true;
-  } 
+// void flyHeartWithRadius(double r)
+// {
+//   if(!hasInitFlyCircle){
+//     initCirclePos = currentPos;
+//     nextPos = initCirclePos;
+//     angle = angle + angleStep;
+//     nextPos.pose.position.x = r *(2*cos(angles::from_degrees(angle)) - cos(angles::from_degrees(2*angle)))  - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = r *(2*sin(angles::from_degrees(angle)) - sin(angles::from_degrees(2*angle)))  + initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//     hasInitFlyCircle = true;
+//   } 
 
-  bool isReached = false;
-  double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
-                       (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
-  double threshold = 0.2;
-  if (distance < threshold)
-  {
-    isReached = true;
-  }
+//   bool isReached = false;
+//   double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
+//                        (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
+//   double threshold = 0.2;
+//   if (distance < threshold)
+//   {
+//     isReached = true;
+//   }
 
-  if (isReached)
-  {
-    // send next pos
-    angle = angle + angleStep;
-    if(angle > 360) angle = angle - 360;
-    nextPos = initCirclePos;
-    nextPos.pose.position.x = r *(2*cos(angles::from_degrees(angle)) - cos(angles::from_degrees(2*angle)))  - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = r *(2*sin(angles::from_degrees(angle)) - sin(angles::from_degrees(2*angle)))  + initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
+//   if (isReached)
+//   {
+//     // send next pos
+//     angle = angle + angleStep;
+//     if(angle > 360) angle = angle - 360;
+//     nextPos = initCirclePos;
+//     nextPos.pose.position.x = r *(2*cos(angles::from_degrees(angle)) - cos(angles::from_degrees(2*angle)))  - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = r *(2*sin(angles::from_degrees(angle)) - sin(angles::from_degrees(2*angle)))  + initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
     
-  } else {
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-  }
-}
+//   } else {
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//   }
+// }
 
-void flyPeachHeartWithRadius(double r)
-{
-  if(!hasInitFlyCircle){
-    initCirclePos = currentPos;
-    nextPos = initCirclePos;
-    angle = angle + angleStep;
-    nextPos.pose.position.x = 16 * sin(angles::from_degrees(angle))*
-                                 sin(angles::from_degrees(angle))*
-                                 sin(angles::from_degrees(angle))* - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = 13*cos(angles::from_degrees(angle))-
-                               5*cos(angles::from_degrees(2*angle))-
-                               2*cos(angles::from_degrees(3*angle)) - 
-                               cos(angles::from_degrees(4*angle))+ initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-    hasInitFlyCircle = true;
-  } 
+// void flyPeachHeartWithRadius(double r)
+// {
+//   if(!hasInitFlyCircle){
+//     initCirclePos = currentPos;
+//     nextPos = initCirclePos;
+//     angle = angle + angleStep;
+//     nextPos.pose.position.x = 16 * sin(angles::from_degrees(angle))*
+//                                  sin(angles::from_degrees(angle))*
+//                                  sin(angles::from_degrees(angle))* - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = 13*cos(angles::from_degrees(angle))-
+//                                5*cos(angles::from_degrees(2*angle))-
+//                                2*cos(angles::from_degrees(3*angle)) - 
+//                                cos(angles::from_degrees(4*angle))+ initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//     hasInitFlyCircle = true;
+//   } 
 
-  bool isReached = false;
-  double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
-                       (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
-  double threshold = 0.1;
-  if (distance < threshold)
-  {
-    isReached = true;
-  }
+//   bool isReached = false;
+//   double distance = sqrt((currentPos.pose.position.x - nextPos.pose.position.x)*(currentPos.pose.position.x - nextPos.pose.position.x)  + 
+//                        (currentPos.pose.position.y - nextPos.pose.position.y)*(currentPos.pose.position.y - nextPos.pose.position.y));
+//   double threshold = 0.1;
+//   if (distance < threshold)
+//   {
+//     isReached = true;
+//   }
 
-  if (isReached)
-  {
-    // send next pos
-    angle = angle + angleStep;
-    if(angle > 360) angle = angle - 360;
-    nextPos = initCirclePos;
-    nextPos.pose.position.x = 16 * sin(angles::from_degrees(angle))*
-                                 sin(angles::from_degrees(angle))*
-                                 sin(angles::from_degrees(angle))* - r + 
-                              initCirclePos.pose.position.x;
-    nextPos.pose.position.y = 13*cos(angles::from_degrees(angle))-
-                               5*cos(angles::from_degrees(2*angle))-
-                               2*cos(angles::from_degrees(3*angle)) - 
-                               cos(angles::from_degrees(4*angle))+ initCirclePos.pose.position.y;
-    ps.pose = nextPos.pose;
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
+//   if (isReached)
+//   {
+//     // send next pos
+//     angle = angle + angleStep;
+//     if(angle > 360) angle = angle - 360;
+//     nextPos = initCirclePos;
+//     nextPos.pose.position.x = 16 * sin(angles::from_degrees(angle))*
+//                                  sin(angles::from_degrees(angle))*
+//                                  sin(angles::from_degrees(angle))* - r + 
+//                               initCirclePos.pose.position.x;
+//     nextPos.pose.position.y = 13*cos(angles::from_degrees(angle))-
+//                                5*cos(angles::from_degrees(2*angle))-
+//                                2*cos(angles::from_degrees(3*angle)) - 
+//                                cos(angles::from_degrees(4*angle))+ initCirclePos.pose.position.y;
+//     ps.pose = nextPos.pose;
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
     
-  } else {
-    ps.header.stamp = ros::Time::now();
-    localPositionPublisher.publish(ps);
-    ROS_INFO_STREAM("next angle:" << angle);
-  }
-}
+//   } else {
+//     ps.header.stamp = ros::Time::now();
+//     localPositionPublisher.publish(ps);
+//     ROS_INFO_STREAM("next angle:" << angle);
+//   }
+// }
 
 
 
-void localPositionReceived(const geometry_msgs::PoseStampedConstPtr& msg){
-    currentPos = *msg;
-    if(!hasSet){
-	     ps = *msg;
-       oriPos = ps;
-	     hasSet = true;
+void localPositionReceived1(const geometry_msgs::PoseStampedConstPtr& msg){
+    currentPos1 = *msg;
+    if(!hasSet1){
+	     ps1 = *msg;
+       oriPos1 = ps1;
+	     hasSet1 = true;
     }	
 }
+
+void localPositionReceived2(const geometry_msgs::PoseStampedConstPtr& msg){
+    currentPos2 = *msg;
+    if(!hasSet2){
+       ps2 = *msg;
+       oriPos2 = ps2;
+       hasSet2 = true;
+    } 
+}
+
 
 
 void sendCommand(const keyboard::Key &key)
@@ -246,81 +273,209 @@ void sendCommand(const keyboard::Key &key)
       case 'i':
       {
         // Forward
-        ps.pose.position.x += value;
-        ROS_INFO_STREAM("Forward: " << value);
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.x += value;
+              ROS_INFO_STREAM("Rotors1 Forward: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.x += value;
+              ROS_INFO_STREAM("Rotors2 Forward: " << value);
+              break; 
+            }
+        }       
         break;
       }
       case ',':
       {
-        // Backward
-        ps.pose.position.x -= value;
-        ROS_INFO_STREAM("Backward: " << value);
-        break;
+        // Backward 
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.x -= value;
+              ROS_INFO_STREAM("Rotors1 Backward: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.x -= value;
+              ROS_INFO_STREAM("Rotors2 Backward: " << value);
+              break; 
+            }
+        }       
+        break;        
       }
       case 'k':
       {
-        // Hold
-        ps.pose.position.x += 0;
-        ps.pose.position.y += 0;
-        ps.pose.position.z += 0;
-        ROS_INFO_STREAM("Hold: " << value);
+        // Hold        
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.x += 0;
+              ps1.pose.position.y += 0;
+              ps1.pose.position.z += 0;
+              ROS_INFO_STREAM("Rotors1 Hold: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.x += 0;
+              ps2.pose.position.y += 0;
+              ps2.pose.position.z += 0;
+              ROS_INFO_STREAM("Rotors2 Hold: " << value);
+              break; 
+            }
+        }
         break;
       }
       case 'j':
       {
-        // left
-        ps.pose.position.y += value;
-        ROS_INFO_STREAM("Left");
+        // left        
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.y += value;
+              ROS_INFO_STREAM("Rotors1 Left: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.y += value;
+              ROS_INFO_STREAM("Rotors2 Left: " << value);
+              break; 
+            }
+        }        
         break;
       }
       case 'l':
       {
         // right
-        ps.pose.position.y -= value;
-        ROS_INFO_STREAM("Right: " << value);
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.y -= value;
+              ROS_INFO_STREAM("Rotors1 Right: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.y -= value;
+              ROS_INFO_STREAM("Rotors2 Right: " << value);
+              break; 
+            }
+        }        
         break;
       }
       case 'u':
       {
-        // turn left
-        ps.pose.orientation.z += value/2;
-        ROS_INFO_STREAM("Turn Left:" << value/2*180/3.14 << "degree");
+        // turn left        
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.orientation.z += value/2;
+              ROS_INFO_STREAM("Rotors1 Turn Left: " << value/2*180/3.14 << "degree");
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.orientation.z += value/2;
+              ROS_INFO_STREAM("Rotors2 Turn Left: " << value/2*180/3.14 << "degree");
+              break; 
+            }
+        }
         break;
       }
       case 'o':
       {
         // turn right
-        ps.pose.orientation.z -= value/2;
-        ROS_INFO_STREAM("Turn Right" << value/2*180/3.14 << "degree");
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.orientation.z -= value/2;
+              ROS_INFO_STREAM("Rotors1 Turn Right: " << value/2*180/3.14 << "degree");
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.orientation.z -= value/2;
+              ROS_INFO_STREAM("Rotors2 Turn Right: " << value/2*180/3.14 << "degree");
+              break; 
+            }
+        }        
         break;
       }
       case 'w':
       {
-        // Up
-        ps.pose.position.z += value;
-        
-        ROS_INFO_STREAM("Up: " << value);
+        // Up 
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1.pose.position.z += value;
+              ROS_INFO_STREAM("Rotors1 Up: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.z += value;
+              ROS_INFO_STREAM("Rotors2 Up: " << value);
+              break; 
+            }
+        }
         break;
       }
       case 's':
       {
-        // Down
-        ps.pose.position.z -= value;
-        if (ps.pose.position.z < 0.2)
+        // Down         
+        switch(currentUAV)
         {
-          ps.pose.position.z = 0.2;
-        }
-        ROS_INFO_STREAM("Down: "<< value);
+            case 1:
+            {
+              ps1.pose.position.z -= value;
+              if (ps1.pose.position.z < 0.2)
+              {
+                  ps1.pose.position.z = 0.2;
+              }
+              ROS_INFO_STREAM("Rotors1 Down: " << value);
+              break;
+            }  
+            case 2:
+            {
+              ps2.pose.position.z -= value;
+              if (ps2.pose.position.z < 0.2)
+              {
+                  ps2.pose.position.z = 0.2;
+              }
+              ROS_INFO_STREAM("Rotors2 Down: " << value);
+              break; 
+            }
+        }        
         break;
       }
-      case 'a':
+      case 'q':
       {
         // Increase value
         value += 0.1f;
         ROS_INFO_STREAM("Increase value:" << value);
         break;
       }
-      case 'd':
+      case 'a':
+      {
+         value = 0.1f;
+         ROS_INFO_STREAM("Increase value:" << value);
+         break;
+      }
+      case 'z':
       {
         // decrease value
         value -= 0.1f;
@@ -333,9 +488,22 @@ void sendCommand(const keyboard::Key &key)
       }
       case 'x':
       {
-        // turn to origin position
-        ps = oriPos;
-        ROS_INFO_STREAM("Turn to original position");
+        // turn to origin position        
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ps1 = oriPos1;
+              ROS_INFO_STREAM("Rotors1 Turn to original position");
+              break;
+            }  
+            case 2:
+            {
+              ps2 = oriPos2;
+              ROS_INFO_STREAM("Rotors2 Turn to original position");
+              break; 
+            }
+        }     
         break;
       }
       case 'y':
@@ -378,37 +546,115 @@ void sendCommand(const keyboard::Key &key)
       //   break;
       // }
       case 't':
-      {
-        offb_set_mode.request.custom_mode = "OFFBOARD";
-        set_mode_client.call(offb_set_mode);
-
-        if (offb_set_mode.response.success)
-          ROS_WARN_STREAM("Offboard enabled");
+      { 
+        switch(currentUAV)
+        {
+            ROS_WARN_STREAM("Switch to Offboard");
+            case 1:
+            {
+              offb_set_mode1.request.custom_mode = "OFFBOARD";
+              set_mode_client1.call(offb_set_mode1);
+              if (offb_set_mode1.response.success)
+                ROS_WARN_STREAM("Rotors1 Offboard enabled");
+              break;
+            }  
+            case 2:
+            {
+              offb_set_mode2.request.custom_mode = "OFFBOARD";
+              set_mode_client2.call(offb_set_mode2);
+              if (offb_set_mode2.response.success)
+                ROS_WARN_STREAM("Rotors2 Offboard enabled");
+              break; 
+            }
+        } 
         break;
       }
       case 'g':
-      {
-        arm_cmd.request.value = true;
-        arming_client.call(arm_cmd);
-        if (arm_cmd.response.success)
-          ROS_WARN_STREAM("Vehicle armed");
+      {   
+        switch(currentUAV)
+        {
+            
+            case 1:
+            {
+              ROS_WARN_STREAM("Rotors1 ARM");
+              arm_cmd1.request.value = true;
+              arming_client1.call(arm_cmd1);
+              if (arm_cmd1.response.success)
+                ROS_WARN_STREAM("Rotors1 Vehicle armed");
+              break;
+            }  
+            case 2:
+            {
+              ROS_WARN_STREAM("Rotors2 ARM");
+              arm_cmd2.request.value = true;
+              arming_client2.call(arm_cmd2);
+              if (arm_cmd2.response.success)
+                ROS_WARN_STREAM("Rotors2 Vehicle armed");
+              break; 
+            }
+        }
         break;
       }
       case 'b':
-      {
-        arm_cmd.request.value = false;
-        arming_client.call(arm_cmd);
-        if (arm_cmd.response.success)
-          ROS_WARN_STREAM("Vehicle disarmed");
+      {   
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              ROS_WARN_STREAM("Rotors1 DISARM");
+              arm_cmd1.request.value = false;
+              arming_client1.call(arm_cmd1);
+              if (arm_cmd1.response.success)
+                ROS_WARN_STREAM("Rotors1 Vehicle disarmed");
+              break;
+            }  
+            case 2:
+            {
+              ROS_WARN_STREAM("Rotors2 DISARM");
+              arm_cmd2.request.value = false;
+              arming_client2.call(arm_cmd2);
+              if (arm_cmd2.response.success)
+                ROS_WARN_STREAM("Rotors2 Vehicle disarmed");
+              break; 
+            }
+        }
         break;
       }
       case 'n':
-      {
-        hasSet = false;
-        ROS_INFO_STREAM("Local Current Position");
+      {                    
+        switch(currentUAV)
+        {
+            case 1:
+            {
+              hasSet1 = false;
+              arm_cmd1.request.value = false;
+              arming_client1.call(arm_cmd1);
+              if (arm_cmd1.response.success)
+                ROS_WARN_STREAM("Rotors1 Vehicle disarmed");
+              break;
+            }  
+            case 2:
+            {
+              hasSet2 = false;
+              arm_cmd2.request.value = false;
+              arming_client2.call(arm_cmd2);
+              if (arm_cmd2.response.success)
+                ROS_WARN_STREAM("Rotors2 Vehicle disarmed");
+              break; 
+            }
+        }
         break;
       }
-
+      case '1':
+      {
+        currentUAV = 1;
+        break;
+      }
+      case '2':
+      {
+        currentUAV = 2;
+        break;
+      }
       default:
       {
 
@@ -423,27 +669,65 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "px4_offboard_position_control_node");
   ros::NodeHandle nodeHandle("~");
 
-  int uav_id;
-  nodeHandle.getParam("uav_id", uav_id);
-  // ROS_INFO("uav_id was %d", uav_id);
+  int uav_num;
+  nodeHandle.getParam("uav_num", uav_num);
+  ROS_INFO("uav_num was %d", uav_num);
+  ros::Subscriber localPositionSubsciber1;
+  ros::Subscriber localPositionSubsciber2;
+  ros::Subscriber commandSubscriber1;
+  ros::Subscriber commandSubscriber2;
 
-  std::string rotors_topic = "/rotors";
-  std::string mavros_setpoint_position_topic = rotors_topic.append(std::to_string(uav_id));
-  mavros_setpoint_position_topic = mavros_setpoint_position_topic.append("/mavros/setpoint_position/local");
-  localPositionPublisher = nodeHandle.advertise<geometry_msgs::PoseStamped>(mavros_setpoint_position_topic,10);
-
-  std::string mavros_local_position_topic;
-  mavros_local_position_topic = rotors_topic;
-  mavros_local_position_topic = mavros_local_position_topic.append("/mavros/local_position/pose");
-  ros::Subscriber localPositionSubsciber = nodeHandle.subscribe(mavros_local_position_topic, 10, localPositionReceived);
-
-  std::string keyboard_topic;
-  keyboard_topic = rotors_topic;
-  keyboard_topic = keyboard_topic.append("/keyboard/keydown");
-  ros::Subscriber commandSubscriber = nodeHandle.subscribe(keyboard_topic,1,sendCommand);
-  
   value = 0.1f;
-  hasSet = false;
+  hasSet1 = false;
+  hasSet2 = false;
+
+  switch(uav_num)
+  {
+      case 1:
+      {
+        currentUAV = 1;
+        localPositionPublisher1 = nodeHandle.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local",10);
+        localPositionSubsciber1 = nodeHandle.subscribe("/mavros/local_position/pose", 10, localPositionReceived1);
+        commandSubscriber1 = nodeHandle.subscribe("/keyboard/keydown",1,sendCommand);
+         
+        break;
+      }
+      case 2:
+      {
+        currentUAV = 1;
+        localPositionPublisher1 = nodeHandle.advertise<geometry_msgs::PoseStamped>("/rotors1/mavros/setpoint_position/local",10);
+        localPositionSubsciber1 = nodeHandle.subscribe("/rotors1/mavros/local_position/pose", 10, localPositionReceived1);
+        commandSubscriber1 = nodeHandle.subscribe("/keyboard/keydown",1,sendCommand);
+
+        localPositionPublisher2 = nodeHandle.advertise<geometry_msgs::PoseStamped>("/rotors2/mavros/setpoint_position/local",10);
+        localPositionSubsciber2 = nodeHandle.subscribe("/rotors2/mavros/local_position/pose", 10, localPositionReceived2);
+        commandSubscriber2 = nodeHandle.subscribe("/keyboard/keydown",1,sendCommand);
+
+        break; 
+      }
+      default:
+      {
+
+      }
+  }   
+
+
+  // std::string rotors_topic = "/rotors";
+  // std::string mavros_setpoint_position_topic = rotors_topic.append(std::to_string(uav_num));
+  // mavros_setpoint_position_topic = mavros_setpoint_position_topic.append("/mavros/setpoint_position/local");
+  // localPositionPublisher = nodeHandle.advertise<geometry_msgs::PoseStamped>(mavros_setpoint_position_topic,10);
+
+  // std::string mavros_local_position_topic;
+  // mavros_local_position_topic = rotors_topic;
+  // mavros_local_position_topic = mavros_local_position_topic.append("/mavros/local_position/pose");
+  // ros::Subscriber localPositionSubsciber = nodeHandle.subscribe(mavros_local_position_topic, 10, localPositionReceived);
+
+  // std::string keyboard_topic;
+  // keyboard_topic = rotors_topic;
+  // keyboard_topic = keyboard_topic.append("/keyboard/keydown");
+  // ros::Subscriber commandSubscriber = nodeHandle.subscribe(keyboard_topic,1,sendCommand);
+  
+
 
   // fly circle parameters
   isFlyCircle = false;
@@ -452,39 +736,81 @@ int main(int argc, char **argv)
   radius = 5;
   angleStep = 5;
 
-  std::string arming_service;
-  arming_service = rotors_topic;
-  arming_service = arming_service.append("/mavros/cmd/arming");
-  arming_client = nodeHandle.serviceClient<mavros_msgs::CommandBool>(arming_service);
+  // std::string arming_service1;
+  // std::string arming_service2;
+  // arming_service = rotors_topic;
+  // arming_service = arming_service.append("/mavros/cmd/arming");
+  
 
-  std::string set_mode_service;
-  set_mode_service = set_mode_service.append("/mavros/set_mode");
-  set_mode_client = nodeHandle.serviceClient<mavros_msgs::SetMode>(set_mode_service);
+  // std::string set_mode_service1;
+  // std::string set_mode_service2;
+  // set_mode_service = set_mode_service.append("/mavros/set_mode");
+  switch(uav_num)
+  {
+      case 1:
+      {
+        arming_client1 = nodeHandle.serviceClient<mavros_msgs::CommandBool>("/mavros/cmd/arming");
+        set_mode_client1 = nodeHandle.serviceClient<mavros_msgs::SetMode>("/mavros/set_mode");
+        break;
+      }
+      case 2:
+      {
+         
+        arming_client1 = nodeHandle.serviceClient<mavros_msgs::CommandBool>("/rotors1/mavros/cmd/arming");
+        arming_client2 = nodeHandle.serviceClient<mavros_msgs::CommandBool>("/rotors2/mavros/cmd/arming");
+        set_mode_client1 = nodeHandle.serviceClient<mavros_msgs::SetMode>("/rotors1/mavros/set_mode");
+        set_mode_client2 = nodeHandle.serviceClient<mavros_msgs::SetMode>("/rotors2/mavros/set_mode");
+
+        break; 
+      }
+      default:
+      {
+
+      }
+  }   
+
+
 
 
 
   ros::Rate loopRate(10.0);
-
   while(ros::ok())
   {
 
-    if(hasSet) {
-      ps.header.seq++;
+    if(true) {
+      ps1.header.seq++;
+      ps2.header.seq++;
 
-      if(!isFlyCircle){
-        ps.header.stamp = ros::Time::now();
+      if(!isFlyCircle)
+      {        
         //ROS_INFO_STREAM("send ps" << ps);
-        localPositionPublisher.publish(ps);
-      } else {
-        flyCircleWithRadius(radius);
+        switch(uav_num)
+        {
+            case 1:
+            {
+                ps1.header.stamp = ros::Time::now();
+                localPositionPublisher1.publish(ps1);
+                // ROS_INFO_STREAM("send ps" << ps1);
+                break;                
+            }
+            case 2:
+            {
+                ps1.header.stamp = ros::Time::now();
+                ps2.header.stamp = ros::Time::now();
+                localPositionPublisher1.publish(ps1);
+                localPositionPublisher2.publish(ps2);
+                break;              
+            }
+        }
+      } 
+      else 
+      {
+        //flyCircleWithRadius(radius);
         //flyHeartWithRadius(radius);
         //flyPeachHeartWithRadius(radius);
-      }
-      
+      }      
     }
-
     ros::spinOnce();
-
     loopRate.sleep();
   }
 

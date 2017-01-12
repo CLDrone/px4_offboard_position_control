@@ -2,7 +2,9 @@
   <!-- a basic listener node -->
   <node name="keyboard" pkg="keyboard" type="keyboard"/>
   <!-- pass args to the listener node -->
-  <node name="px4_offboard_position_control" pkg="px4_offboard_position_control" type="px4_offboard_position_control" output="screen"/> 
+  <node name="px4_offboard_position_control" pkg="px4_offboard_position_control" type="px4_offboard_position_control" output="screen"> 
+  	<param name="uav_num" value="1" /> 
+  </node>
   
 </launch>
 
