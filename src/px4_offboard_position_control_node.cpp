@@ -415,18 +415,32 @@ void sendCommand(const keyboard::Key &key)
       }
   }
 
-
 }
 
 
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "px4_offboard_position_control_node");
-  ros::NodeHandle nodeHandle;
+  ros::NodeHandle nodeHandle("~");
 
-  localPositionPublisher = nodeHandle.advertise<geometry_msgs::PoseStamped>("/mavros/setpoint_position/local",10);
-  ros::Subscriber localPositionSubsciber = nodeHandle.subscribe("/mavros/local_position/pose", 10, localPositionReceived);
-  ros::Subscriber commandSubscriber = nodeHandle.subscribe("/keyboard/keydown",1,sendCommand);
+  int uav_id;
+  nodeHandle.getParam("uav_id", uav_id);
+  // ROS_INFO("uav_id was %d", uav_id);
+
+  std::string rotors_topic = "/rotors";
+  std::string mavros_setpoint_position_topic = rotors_topic.append(std::to_string(uav_id));
+  mavros_setpoint_position_topic = mavros_setpoint_position_topic.append("/mavros/setpoint_position/local");
+  localPositionPublisher = nodeHandle.advertise<geometry_msgs::PoseStamped>(mavros_setpoint_position_topic,10);
+
+  std::string mavros_local_position_topic;
+  mavros_local_position_topic = rotors_topic;
+  mavros_local_position_topic = mavros_local_position_topic.append("/mavros/local_position/pose");
+  ros::Subscriber localPositionSubsciber = nodeHandle.subscribe(mavros_local_position_topic, 10, localPositionReceived);
+
+  std::string keyboard_topic;
+  keyboard_topic = rotors_topic;
+  keyboard_topic = keyboard_topic.append("/keyboard/keydown");
+  ros::Subscriber commandSubscriber = nodeHandle.subscribe(keyboard_topic,1,sendCommand);
   
   value = 0.1f;
   hasSet = false;
@@ -438,8 +452,14 @@ int main(int argc, char **argv)
   radius = 5;
   angleStep = 5;
 
-  arming_client = nodeHandle.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
-  set_mode_client = nodeHandle.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
+  std::string arming_service;
+  arming_service = rotors_topic;
+  arming_service = arming_service.append("/mavros/cmd/arming");
+  arming_client = nodeHandle.serviceClient<mavros_msgs::CommandBool>(arming_service);
+
+  std::string set_mode_service;
+  set_mode_service = set_mode_service.append("/mavros/set_mode");
+  set_mode_client = nodeHandle.serviceClient<mavros_msgs::SetMode>(set_mode_service);
 
 
 
